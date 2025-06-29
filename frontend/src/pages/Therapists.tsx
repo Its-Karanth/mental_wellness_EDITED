@@ -7,12 +7,34 @@ const Therapists = () => {
   const [specialization, setSpecialization] = useState("");
   const [day, setDay] = useState("");
   const [selected, setSelected] = useState(null);
+  const [refreshInterval, setRefreshInterval] = useState(null);
 
-  useEffect(() => {
+  const fetchTherapists = () => {
     axios.get("http://localhost:5000/api/therapists").then((res) => {
       setTherapists(res.data);
       setFiltered(res.data);
+    }).catch((err) => {
+      console.error("Error fetching therapists:", err);
+      setTherapists([]);
+      setFiltered([]);
     });
+  };
+
+  useEffect(() => {
+    // Initial fetch
+    fetchTherapists();
+
+    // Set up auto-refresh every 30 seconds for real-time synchronization
+    const interval = setInterval(() => {
+      fetchTherapists();
+    }, 30000); // 30 seconds
+
+    setRefreshInterval(interval);
+
+    // Cleanup interval on component unmount
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   // Get unique specializations and days
@@ -43,7 +65,21 @@ const Therapists = () => {
 
   return (
     <div className="container py-4" style={{ maxWidth: 900 }}>
-      <h2 className="mb-4">Find a Therapist</h2>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2>Find a Therapist</h2>
+        <div className="d-flex align-items-center gap-2">
+          <small className="text-muted">
+            Auto-refreshing every 30 seconds
+          </small>
+          <button 
+            className="btn btn-outline-primary btn-sm"
+            onClick={fetchTherapists}
+            title="Refresh manually"
+          >
+            🔄 Refresh
+          </button>
+        </div>
+      </div>
       <div className="row mb-3">
         <div className="col-md-4">
           <label className="form-label">Specialization</label>
@@ -75,10 +111,22 @@ const Therapists = () => {
             ))}
           </select>
         </div>
+        <div className="col-md-4 d-flex align-items-end">
+          <div className="text-muted">
+            Showing {filtered.length} of {therapists.length} therapists
+          </div>
+        </div>
       </div>
       <div className="row">
         {filtered.length === 0 && (
-          <div className="col-12">No therapists found.</div>
+          <div className="col-12">
+            <div className="alert alert-info text-center">
+              {therapists.length === 0 
+                ? "No therapists available at the moment. Please check back later." 
+                : "No therapists match your current filters. Try adjusting your search criteria."
+              }
+            </div>
+          </div>
         )}
         {filtered.map((t) => (
           <div className="col-md-6 mb-4" key={t._id}>

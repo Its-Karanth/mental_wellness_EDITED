@@ -8,15 +8,15 @@ const Appointments = () => {
   const [therapists, setTherapists] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [selectedTherapist, setSelectedTherapist] = useState("");
-  const [date, setDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
   const [type, setType] = useState("Video Call");
-  const [availableDays, setAvailableDays] = useState([]);
-  const [availableTimes, setAvailableTimes] = useState([]);
-  const [selectedDay, setSelectedDay] = useState("");
+  const [availableSlots, setAvailableSlots] = useState([]);
   const [selectedTime, setSelectedTime] = useState("");
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState("");
 
   useEffect(() => {
     if (!user) {
@@ -39,224 +39,275 @@ const Appointments = () => {
       .then((res) => setAppointments(res.data))
       .catch(() => setAppointments([]));
   };
+  
   useEffect(() => {
     fetchAppointments();
     // eslint-disable-next-line
   }, []);
 
-  // When therapist changes, update available days
+  // Fetch available slots when therapist or date changes
   useEffect(() => {
-    if (!selectedTherapist) {
-      setAvailableDays([]);
-      setAvailableTimes([]);
-      setSelectedDay("");
+    if (!selectedTherapist || !selectedDate) {
+      setAvailableSlots([]);
       setSelectedTime("");
       return;
     }
-    const therapist = therapists.find((t) => t._id === selectedTherapist);
-    if (therapist && therapist.availability) {
-      setAvailableDays(therapist.availability.map((a) => a.day));
-      setSelectedDay("");
-      setAvailableTimes([]);
-      setSelectedTime("");
-    }
-  }, [selectedTherapist, therapists]);
 
-  // When day changes, update available times
-  useEffect(() => {
-    if (!selectedTherapist || !selectedDay) {
-      setAvailableTimes([]);
+    setAvailabilityLoading(true);
+    setAvailabilityError("");
+    
+    // Format date for API (YYYY-MM-DD)
+    const dateStr = new Date(selectedDate).toISOString().split('T')[0];
+    
+    axios.get(`http://localhost:5000/api/therapists/${selectedTherapist}/availability/${dateStr}`)
+      .then((res) => {
+        if (res.data.available) {
+          setAvailableSlots(res.data.availableSlots);
       setSelectedTime("");
-      return;
-    }
-    const therapist = therapists.find((t) => t._id === selectedTherapist);
-    if (therapist && therapist.availability) {
-      const slot = therapist.availability.find((a) => a.day === selectedDay);
-      if (slot) {
-        // Generate 30-min slots between start and end
-        const times = [];
-        let [h, m] = slot.start.split(":").map(Number);
-        const [eh, em] = slot.end.split(":").map(Number);
-        while (h < eh || (h === eh && m < em)) {
-          const time = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
-          times.push(time);
-          m += 30;
-          if (m >= 60) {
-            h++;
-            m = 0;
-          }
+        } else {
+          setAvailableSlots([]);
+          setAvailabilityError(res.data.message);
         }
-        // Filter out times before now if selected day is today
-        const today = new Date();
-        const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-        const selectedDayIdx = daysOfWeek.indexOf(selectedDay);
-        const isToday = today.getDay() === selectedDayIdx;
-        let filteredTimes = times;
-        if (isToday) {
-          const nowMinutes = today.getHours() * 60 + today.getMinutes();
-          filteredTimes = times.filter((t) => {
-            const [th, tm] = t.split(":").map(Number);
-            return th * 60 + tm > nowMinutes;
-          });
-        }
-        setAvailableTimes(filteredTimes);
-        setSelectedTime("");
-      }
-    }
-  }, [selectedDay, selectedTherapist, therapists]);
-
-  // Generate available dates for the selected day
-  function getAvailableDatesForDay(selectedDay) {
-    if (!selectedDay) return [];
-    const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const targetDayIdx = daysOfWeek.indexOf(selectedDay);
-    const start = new Date(2025, 5, 30); // 30-06-2025
-    const dates = [];
-    let d = new Date(start);
-    // Find the first date that matches the selected day
-    while (d.getDay() !== targetDayIdx) {
-      d.setDate(d.getDate() + 1);
-    }
-    // Now push all matching days for the next 60 days
-    for (let i = 0; dates.length < 20 && i < 120; i++) { // up to 20 dates, max 120 days lookahead
-      if (d >= start) {
-        dates.push(new Date(d));
-      }
-      d.setDate(d.getDate() + 7); // next week same day
-    }
-    return dates;
-  }
-  const availableDates = getAvailableDatesForDay(selectedDay);
+      })
+      .catch((err) => {
+        setAvailableSlots([]);
+        setAvailabilityError(err.response?.data?.error || "Failed to fetch availability");
+      })
+      .finally(() => {
+        setAvailabilityLoading(false);
+      });
+  }, [selectedTherapist, selectedDate]);
 
   // Helper to format time as 12-hour with AM/PM
   function formatTime12h(time) {
     const [h, m] = time.split(":").map(Number);
     const ampm = h >= 12 ? "PM" : "AM";
     const hour = h % 12 === 0 ? 12 : h % 12;
-    return `${hour.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}` + ` ${ampm}`;
+    return `${hour.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")} ${ampm}`;
   }
 
-  // Book appointment: use selectedDay and selectedTime to build date
+  // Get minimum date (today)
+  const getMinDate = () => {
+    const today = new Date();
+    return today.toISOString().split('T')[0];
+  };
+
+  // Book appointment
   const handleBook = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    
     if (!user || !user.id) {
       setError("You must be logged in to book an appointment.");
       return;
     }
-    if (!selectedTherapist || !selectedDay || !selectedTime || !date) {
-      setError("Please select a therapist, day, date, and time.");
+    
+    if (!selectedTherapist || !selectedDate || !selectedTime) {
+      setError("Please select a therapist, date, and time.");
       return;
     }
-    // Use selected date and selected time
-    const apptDate = new Date(date);
-    const [h, m] = selectedTime.split(":");
-    apptDate.setHours(Number(h), Number(m), 0, 0);
-    // Format as ISO string
-    const apptDateISO = apptDate.toISOString();
+
+    // Validate that selected time is in available slots
+    if (!availableSlots.includes(selectedTime)) {
+      setError("Selected time is not available. Please choose from the available slots.");
+      return;
+    }
+
+    // Create appointment date
+    const appointmentDate = new Date(selectedDate);
+    const [hours, minutes] = selectedTime.split(":").map(Number);
+    appointmentDate.setHours(hours, minutes, 0, 0);
+
     setLoading(true);
     try {
-      await axios.post("http://localhost:5000/api/appointments", {
+      const response = await axios.post("http://localhost:5000/api/appointments", {
         user: user.id,
         therapist: selectedTherapist,
-        date: apptDateISO,
+        date: appointmentDate.toISOString(),
         type,
       });
-      setSuccess("Appointment booked!");
+      
+      setSuccess(response.data.message || "Appointment booked successfully!");
+      
+      // Reset form
       setSelectedTherapist("");
-      setSelectedDay("");
+      setSelectedDate("");
       setSelectedTime("");
-      setDate("");
       setType("Video Call");
+      setAvailableSlots([]);
+      
+      // Refresh appointments list
       fetchAppointments();
+      
     } catch (err) {
-      if (err.response && err.response.data && err.response.data.error) {
-        setError("Failed to book appointment: " + err.response.data.error);
-      } else if (err.message) {
-        setError("Failed to book appointment: " + err.message);
+      if (err.response?.data?.error) {
+        setError(err.response.data.error);
       } else {
-        setError("Failed to book appointment.");
+        setError("Failed to book appointment. Please try again.");
       }
     } finally {
       setLoading(false);
     }
   };
 
+  // Get therapist name by ID
+  const getTherapistName = (therapistId) => {
+    const therapist = therapists.find(t => t._id === therapistId);
+    return therapist ? therapist.name : "Unknown Therapist";
+  };
+
+  // Get therapist availability message
+  const getTherapistAvailabilityMessage = (therapistId) => {
+    const therapist = therapists.find(t => t._id === therapistId);
+    if (!therapist || !therapist.availability || therapist.availability.length === 0) {
+      return null;
+    }
+
+    const availability = therapist.availability;
+    
+    if (availability.length === 1) {
+      const slot = availability[0];
+      return `📅 ${therapist.name} is available only on ${slot.day}s from ${slot.start} to ${slot.end}`;
+    } else if (availability.length === 2) {
+      const days = availability.map(slot => slot.day).join('s and ');
+      return `📅 ${therapist.name} is available on ${days}s`;
+    } else {
+      const days = availability.map(slot => slot.day).join('s, ');
+      return `📅 ${therapist.name} is available on ${days}s`;
+    }
+  };
+
+  // Get selected therapist's availability details
+  const selectedTherapistInfo = therapists.find(t => t._id === selectedTherapist);
+  const availabilityMessage = getTherapistAvailabilityMessage(selectedTherapist);
+
   return (
-    <div className="container py-4" style={{ maxWidth: 700 }}>
+    <div className="container py-4" style={{ maxWidth: 800 }}>
       <div className="card mb-4">
         <div className="card-header fw-bold">Book Appointment</div>
         <div className="card-body">
+          {/* Availability Message */}
+          {availabilityMessage && (
+            <div className="alert alert-info mb-4">
+              <div className="d-flex align-items-center">
+                <i className="fas fa-info-circle me-2"></i>
+                <div>
+                  <strong>Availability Information:</strong><br />
+                  {availabilityMessage}
+                  {selectedTherapistInfo?.availability && (
+                    <div className="mt-2">
+                      <small className="text-muted">
+                        <strong>Detailed Schedule:</strong><br />
+                        {selectedTherapistInfo.availability.map((slot, index) => (
+                          <span key={index}>
+                            {slot.day}: {slot.start} - {slot.end}
+                            {index < selectedTherapistInfo.availability.length - 1 ? ', ' : ''}
+                          </span>
+                        ))}
+                      </small>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* No Therapist Selected Message */}
+          {!selectedTherapist && (
+            <div className="alert alert-light mb-4">
+              <div className="d-flex align-items-center">
+                <i className="fas fa-lightbulb me-2"></i>
+                <div>
+                  <strong>💡 Tip:</strong> Select a therapist above to see their availability schedule. 
+                  The availability days are shown in parentheses next to each therapist's name.
+                </div>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleBook} className="row g-3 align-items-end">
-            <div className="col-md-5">
-              <label className="form-label">Therapist</label>
+            {/* Therapist Selection */}
+            <div className="col-md-6">
+              <label className="form-label">Select Therapist</label>
               <select
                 className="form-select"
                 value={selectedTherapist}
-                onChange={(e) => setSelectedTherapist(e.target.value)}
+                onChange={(e) => {
+                  setSelectedTherapist(e.target.value);
+                  setSelectedDate("");
+                  setSelectedTime("");
+                  setAvailableSlots([]);
+                }}
                 required
               >
-                <option value="">Select therapist</option>
-                {therapists.map((t) => (
+                <option value="">Choose a therapist...</option>
+                {therapists.map((t) => {
+                  const availabilityText = t.availability && t.availability.length > 0 
+                    ? ` (${t.availability.map(slot => slot.day).join(', ')})`
+                    : '';
+                  return (
                   <option key={t._id} value={t._id}>
-                    {t.name} {t.specialization ? `(${t.specialization})` : ''}
+                      {t.name} {t.specialization ? `(${t.specialization})` : ''}{availabilityText}
                   </option>
-                ))}
+                  );
+                })}
               </select>
+              <small className="text-muted">
+                Availability is shown in parentheses for each therapist
+              </small>
             </div>
-            <div className="col-md-3">
-              <label className="form-label">Day</label>
-              <select
-                className="form-select"
-                value={selectedDay}
-                onChange={(e) => setSelectedDay(e.target.value)}
+
+            {/* Date Selection */}
+            <div className="col-md-6">
+              <label className="form-label">Select Date</label>
+              <input
+                type="date"
+                className="form-control"
+                value={selectedDate}
+                onChange={(e) => {
+                  setSelectedDate(e.target.value);
+                  setSelectedTime("");
+                }}
+                min={getMinDate()}
                 required
-                disabled={!availableDays.length}
-              >
-                <option value="">Select day</option>
-                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day) => (
-                  <option key={day} value={day}>
-                    {day}
-                  </option>
-                ))}
-              </select>
+                disabled={!selectedTherapist}
+              />
             </div>
-            <div className="col-md-3">
-              <label className="form-label">Date</label>
-              <select
-                className="form-select"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                required
-              >
-                <option value="">Select date</option>
-                {availableDates.map((d) => (
-                  <option key={d.toISOString()} value={d.toISOString()}>
-                    {d.toLocaleDateString()}
-                  </option>
-                ))}
-              </select>
+
+            {/* Time Selection */}
+            <div className="col-md-6">
+              <label className="form-label">Select Time</label>
+              {availabilityLoading ? (
+                <div className="form-control-plaintext">Loading available times...</div>
+              ) : availabilityError ? (
+                <div className="alert alert-warning py-2 mb-0">
+                  {availabilityError}
+                </div>
+              ) : availableSlots.length === 0 ? (
+                <div className="form-control-plaintext">
+                  {selectedDate ? "No available slots for this date" : "Select a date to see available times"}
             </div>
-            <div className="col-md-2">
-              <label className="form-label">Time</label>
+              ) : (
               <select
                 className="form-select"
                 value={selectedTime}
                 onChange={(e) => setSelectedTime(e.target.value)}
                 required
-                disabled={!availableTimes.length}
               >
-                <option value="">Select time</option>
-                {availableTimes.map((time) => (
+                  <option value="">Choose a time...</option>
+                  {availableSlots.map((time) => (
                   <option key={time} value={time}>
                     {formatTime12h(time)}
                   </option>
                 ))}
               </select>
+              )}
             </div>
-            <div className="col-md-2">
-              <label className="form-label">Type</label>
+
+            {/* Appointment Type */}
+            <div className="col-md-6">
+              <label className="form-label">Appointment Type</label>
               <select
                 className="form-select"
                 value={type}
@@ -268,15 +319,19 @@ const Appointments = () => {
                 <option value="Phone Call">Phone Call</option>
               </select>
             </div>
-            <div className="col-md-2 d-grid">
+
+            {/* Book Button */}
+            <div className="col-12 d-grid">
               <button
                 className="btn btn-primary"
                 type="submit"
-                disabled={loading || !user}
+                disabled={loading || !user || !selectedTherapist || !selectedDate || !selectedTime}
               >
-                {loading ? "Booking..." : "Book"}
+                {loading ? "Booking..." : "Book Appointment"}
               </button>
             </div>
+
+            {/* Error and Success Messages */}
             {error && (
               <div className="col-12 alert alert-danger py-2">{error}</div>
             )}
@@ -287,6 +342,7 @@ const Appointments = () => {
         </div>
       </div>
 
+      {/* My Appointments */}
       <div className="card">
         <div className="card-header fw-bold">My Appointments</div>
         <div className="card-body p-0">
@@ -302,7 +358,7 @@ const Appointments = () => {
             <tbody>
               {appointments.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="text-center">
+                  <td colSpan={4} className="text-center">
                     No appointments found.
                   </td>
                 </tr>
@@ -311,10 +367,20 @@ const Appointments = () => {
                 <tr key={a._id}>
                   <td>{new Date(a.date).toLocaleString()}</td>
                   <td>
-                    {a.therapist?.name} ({a.therapist?.email})
+                    {a.therapist?.name || getTherapistName(a.therapist)} 
+                    {a.therapist?.email && ` (${a.therapist.email})`}
                   </td>
                   <td>{a.type || "Video Call"}</td>
-                  <td>{a.status}</td>
+                  <td>
+                    <span className={`badge ${
+                      a.status === 'accepted' ? 'bg-success' :
+                      a.status === 'rejected' ? 'bg-danger' :
+                      a.status === 'completed' ? 'bg-info' :
+                      'bg-warning'
+                    }`}>
+                      {a.status || 'pending'}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

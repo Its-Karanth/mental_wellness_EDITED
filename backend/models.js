@@ -15,7 +15,7 @@ const userSchema = new mongoose.Schema({
       end: String,   // e.g. '17:00'
     }
   ]
-});
+}, { timestamps: true });
 
 const chatSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -27,7 +27,7 @@ const chatSchema = new mongoose.Schema({
     }
   ],
   createdAt: { type: Date, default: Date.now }
-});
+}, { timestamps: true });
 
 const appointmentSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -37,6 +37,7 @@ const appointmentSchema = new mongoose.Schema({
   status: { type: String, enum: ['pending', 'accepted', 'rejected', 'completed'], default: 'pending' },
   notes: { type: String },
   medication: { type: String },
+  jitsiRoom: { type: String }, // Jitsi room name for video call
   createdAt: { type: Date, default: Date.now }
 });
 

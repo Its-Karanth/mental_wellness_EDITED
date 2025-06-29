@@ -11,6 +11,8 @@ const Register = () => {
     email: "",
     password: "",
     confirmPassword: "",
+    phone: "",
+    address: "",
     role: isAdminRoute ? "admin" : "user",
   });
   const [error, setError] = useState("");
@@ -24,8 +26,17 @@ const Register = () => {
     setLoading(true);
     try {
       if (isAdminRoute) {
-        // Call the backend admin-register endpoint
-        await axios.post("http://localhost:5000/api/auth/admin-register");
+        if (formData.password !== formData.confirmPassword) {
+          setError("Passwords do not match");
+          setLoading(false);
+          return;
+        }
+        // Call the backend admin-register endpoint with form data
+        await axios.post("http://localhost:5000/api/auth/admin-register", {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+        });
         setSuccess("Admin registration successful! Please login.");
         setTimeout(() => navigate("/admin/login"), 1500);
       } else {
@@ -38,6 +49,8 @@ const Register = () => {
           name: formData.name,
           email: formData.email,
           password: formData.password,
+          phone: formData.phone,
+          address: formData.address,
           role: formData.role,
         });
         setSuccess("Registration successful! Please login.");
@@ -102,6 +115,40 @@ const Register = () => {
               placeholder={isAdminRoute ? "admin@wellness.com" : "Enter your email"}
             />
           </div>
+          {!isAdminRoute && (
+            <>
+              <div className="mb-3">
+                <label htmlFor="phone" className="form-label">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  className="form-control"
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({ ...formData, phone: e.target.value })
+                  }
+                  placeholder="Enter your phone number"
+                />
+              </div>
+              <div className="mb-3">
+                <label htmlFor="address" className="form-label">
+                  Address
+                </label>
+                <textarea
+                  className="form-control"
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) =>
+                    setFormData({ ...formData, address: e.target.value })
+                  }
+                  rows={3}
+                  placeholder="Enter your address"
+                />
+              </div>
+            </>
+          )}
           <div className="mb-3">
             <label htmlFor="password" className="form-label">
               Password

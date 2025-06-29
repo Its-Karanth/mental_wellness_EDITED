@@ -252,16 +252,23 @@ const TherapistDashboard = () => {
                         />
                       </td>
                       <td>
+                        {a.type === 'Video Call' && a.jitsiRoom && (
+                          <div className="mb-2">
+                            <a
+                              href={`https://meet.jit.si/${a.jitsiRoom}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-outline-success btn-sm"
+                            >
+                              Start Video Call
+                            </a>
+                            <div className="small text-muted mt-1">
+                              The session will start for the user when you join as moderator.
+                            </div>
+                          </div>
+                        )}
                         <button
-                          className="btn btn-sm btn-primary mb-1"
-                          onClick={() =>
-                            handleSaveNotes(a._id, a.notes, a.medication)
-                          }
-                        >
-                          Save
-                        </button>
-                        <button
-                          className="btn btn-sm btn-outline-primary"
+                          className="btn btn-outline-primary btn-sm"
                           onClick={() => {
                             setModalAppointment(a);
                             setShowModal(true);

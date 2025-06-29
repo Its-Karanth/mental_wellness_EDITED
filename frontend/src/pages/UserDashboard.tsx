@@ -21,6 +21,7 @@ interface Appointment {
   date: string;
   type: string;
   status?: string;
+  jitsiRoom?: string;
 }
 
 // Phone numbers to assign to therapists
@@ -487,6 +488,21 @@ const UserDashboard = () => {
                           {new Date(appointment.date).toLocaleString()}
                         </div>
                         <div className="text-primary small">{appointment.type}</div>
+                        {appointment.type === 'Video Call' && appointment.jitsiRoom && (
+                          <div className="mt-1">
+                            <a
+                              href={`https://meet.jit.si/${appointment.jitsiRoom}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="btn btn-outline-primary btn-sm"
+                            >
+                              Join Video Call
+                            </a>
+                            <div className="small text-muted mt-1">
+                              Your session will start when your therapist joins the call.
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="d-flex gap-2">
                         <button
@@ -496,7 +512,7 @@ const UserDashboard = () => {
                             setShowModal(true);
                           }}
                         >
-                          Join Session
+                          Details
                         </button>
                         {appointment.status !== 'completed' && (
                           <button
