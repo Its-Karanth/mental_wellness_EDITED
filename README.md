@@ -78,12 +78,24 @@ npm install
 
 Create a `.env` file in the backend directory:
 
-```env
-MONGODB_URI=your_mongodb_atlas_connection_string
-GROQ_API_KEY=your_groq_cloud_api_key
-JWT_SECRET=your_jwt_secret_key
-PORT=5000
+```bash
+cp backend/.env.example backend/.env
 ```
+
+Then edit the `.env` file and add your actual values:
+
+```env
+# Get your Groq API key from: https://console.groq.com/
+GROQ_API_KEY=your_groq_cloud_api_key_here
+
+# JWT secret for authentication (use a strong random string)
+JWT_SECRET=your_jwt_secret_key_here
+
+# MongoDB URI (optional - defaults to localhost)
+MONGO_URI=mongodb://localhost:27017/mental-wellness-chat
+```
+
+**Important**: Never commit your `.env` file to version control. It's already included in `.gitignore`.
 
 Start the backend server:
 
